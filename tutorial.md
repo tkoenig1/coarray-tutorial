@@ -29,6 +29,14 @@ Using PGAS means that coarray Fortran can be used on a massively
 massively parallel computing system as well as a shared-memory
 implementation on a single, multi-CPU computer.
 
+## A remark on compiling and running the example programs
+
+If you want to try out the example programs, you need have a coarray-capable
+compiler and know how to compile and run the programs. Setting the number
+of images is done in a compiler-dependent manner, usually via a compiler option,
+an environment variable, or, if the system is MPI-based, as an argument
+to `mpirun`.
+
 # Images and synchronization
 
 One central concepts of coarray Fortran is that of an image.  When a
