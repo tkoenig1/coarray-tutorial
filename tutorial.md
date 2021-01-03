@@ -61,7 +61,7 @@ This program will output something like
  Hello from image           3 of           4
  Hello from image           1 of           4
 ```
-(depending on how many images you run) and shows the use of two
+depending on how many images you run and shows the use of two
 important functions: The number of images that is run can be found
 `num_images()` function and the current image via `this_image()`.
 Both of these are functions that are built into the language
@@ -286,7 +286,7 @@ or if you are a fan of Douglas Adams, you can use
   integer :: a[42:*]
 ```
 Actually, declaring a coarray a `a[*]` is only a shortcut for
-declaring the coarray as `a[1:]` with a lower cobound of 1.
+declaring the coarray as `a[1:*]` with a lower cobound of 1.
 There is a subtlety to the use of `this_image()`: Without
 any arguments, it gives you the image number.  When it has
 a coarray argument, it will give you the argument that you
@@ -377,7 +377,7 @@ An allocatable coarray can be declared with the syntax
 ```
   real, dimension(:), codimension(:), allocatable :: a
 ```
-(note the colons in the declarations) and allocated 
+(note the colons in the declarations) and allocated with
 ```
   allocate (a(n)[*])
 ```
@@ -385,13 +385,77 @@ Like a regular allocatable variable, it will be deallocated
 automatically when going out of scope. `SOURCE` and `MOLD`
 can also be specified.
 
-# More advanced synchronization
+One important thing to notice is that coarray sizes have to
+agree on all images, otherwise unpredictable things will happen;
+at best, there will be an error message.  If you want to, you
+can adjust the bounds.  This, for example, would be legal:
+```
+  from = (this_image() - 1) * n + 1
+  to = this_image () * n
+  allocate (a(from:to)[*])
+```
+and give you an index running from `1` to `num_images * n`, but
+you would still have to specify the correct coarray.
 
-Add `SYNC IMAGES` here.
+# More advanced synchronization -- `SYNC IMAGES`
+
+`SYNC ALL` is not everything that may be needed for synchronization.
+Suppose not every image needs to communicate with every other image,
+but only with a specific set.  It is possible to use `SYNC IMAGES`
+for this purpose.
+
+`SYNC IMAGES` takes as argument an image, or a list of the images
+with which it should synchronize, for example
+```
+  if (this_image () == 2) sync_images ([1,3])
+```
+This will hold execution of image number two until a corresponding
+`SYNC IMAGES` statement has been executed on images 1 and 3:
+```
+  if (this_image () == 1) sync_images (2)
+  if (this_image () == 3) sync_images (2)
+```
+The following example uses `SYNC IMAGES` for a pairwise exchange of
+greetings between different images:
+```
+program main
+  implicit none
+  character (len=30) :: greetings[*]
+  integer :: me, n, you
+  me = this_image()
+  n = num_images()
+  if (mod(n,2) == 1 .and. me == n) then
+     greetings = "Hello, myself"
+  else
+     you = me + 2 * modulo(me,2) - 1
+     write (unit=greetings[you],fmt='(A,I0,A,I0)') &
+          "Greetings from ", me, " to ", you
+     sync images (you)
+  end if
+  write (*,'(A)') trim(greetings)
+end program main
+```
+Here is an idiom to have image 1 prepare something and
+have all images wait on image 1, plus have image 1
+wait on all other images:
+```
+program main
+  implicit none
+  if (this_image() == 1) then
+     write (*,'(A)') "Preparing things on image 1"
+     sync images(*)
+  else
+     sync images(1)
+  end if
+  write (*,'(A,I0)') "Using prepared things on image ", this_image()
+end program
+```
+Two images can issue `SYNC IMAGES` commands to each other multiple
+times. Execution will only continue if the numbers match.
 
 # Coroutines
 
-An alternative: Coroutines!
+Another method.
 
 # Getting it to work
 
