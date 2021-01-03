@@ -4,13 +4,13 @@ Since the introduction of the Fortran 2008 standard, Fortran is a
 parallel language.  Unlike the parallel extensions
 [OpenMP](https://www.openmp.org/) or
 [OpenACC](https://www.openacc.org/), the coarray parallelism
-Coarrays is built into the language core, so there no
+Coarrays is built into the language core, so there are
 fewer problems with interaction between different standards and
 different standards bodies.
 
 This tutorial aims to introduce Fortran coarrays to the general user.
 A general familiarity with modern Fortran is assumed.  People who are
-not familar, but are familiar with other imperative languages like C
+not familar with Fortran, but are familiar with other imperative languages like C
 might need to refer to other sources such as the [FortranWiki](http://fortranwiki.org/fortran/show/HomePage) to check what
 individual language constructs mean.
 
@@ -25,13 +25,13 @@ memory of other images via special constructs.
 This is more loosely coupled than the thread model, where threads
 share variables unless explicitly directed otherwise.
 
-Using PGAS means that coarray Fortran can be used on a massively
+Using PGAS means that coarray Fortran can be used on a
 massively parallel computing system as well as a shared-memory
 implementation on a single, multi-CPU computer.
 
 ## A remark on compiling and running the example programs
 
-If you want to try out the example programs, you need have a coarray-capable
+If you want to try out the example programs, you need to have a coarray-capable
 compiler and know how to compile and run the programs. Setting the number
 of images is done in a compiler-dependent manner, usually via a compiler option,
 an environment variable, or, if the system is MPI-based, as an argument
@@ -39,7 +39,7 @@ to `mpirun`.
 
 # Images and synchronization
 
-One central concepts of coarray Fortran is that of an image.  When a
+One central concept of coarray Fortran is that of an image.  When a
 program is run, it starts multiple copies (or, possibly, one copy) of
 itself. Each image runs in parallel until completion, and works
 independently of other images unless the programmer specifically
@@ -63,6 +63,7 @@ This program will output something like
 ```
 depending on how many images you run and shows the use of two
 important functions: The number of images that is run can be found
+with the
 `num_images()` function and the current image via `this_image()`.
 Both of these are functions that are built into the language
 (so-called intrinsic functions).
@@ -97,7 +98,7 @@ The output will look something like
  Goodbye from image           1 of           4
  Goodbye from image           2 of           4
 ```
-What you can do instead is to put things into order is to insert
+What you can do instead to put things into order is to insert
 `SYNC ALL` between the two `write` statements, like this:
 ```
 program main
@@ -471,7 +472,7 @@ to have MPI installed to run it.
 Another possibilility currently under development is the [shared
 memory coarray
 branch](https://gcc.gnu.org/git/?p=gcc.git;a=tree;h=refs/heads/devel/coarray_native;hb=refs/heads/devel/coarray_native).
-This is currently under active development, but does not yet have all
+This will work without any additional libraries and currently under active development, but does not yet have all
 features implemented.
 
 ## Using ifort
