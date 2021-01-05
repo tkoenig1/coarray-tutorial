@@ -119,7 +119,24 @@ which will get the intended result:
  Goodbye from image           4 of           4
  Goodbye from image           3 of           4
 ```
-
+The `SYNC ALL` statements do not have to be in the same place in the
+program.  For example, this program will print the "Hello" message
+from image 1 later than all the others:
+```
+program main
+  implicit none
+  if (this_image() == 1) sync all
+  write (*,*) "Hello from image", this_image()
+  if (this_image() /= 1) sync all
+end program
+```
+Output is (for example)
+```
+ Hello from image           2
+ Hello from image           4
+ Hello from image           3
+ Hello from image           1
+```
 # Coarrays
 In order to be really useful, the images need a way to exchange data
 with other images.  This can be done with coarrays.
@@ -198,15 +215,15 @@ where all images do work, while only one of them does I/O.
 ```
 program main
   implicit none
-  integer :: sq[*]
+  integer :: me[*]
   integer :: i, s, n
-  sq = this_image()
+  me = this_image()
   sync all ! Do not forget this.
   if (this_image() == 1) then
      s = 0
      n = num_images()
      do i=1, n
-        s = s + sq[i]
+        s = s + me[i]
      end do
      write (*,'(*(A,I0))') "Number of images: ", n, " sum: ", s, &
      	   " expected: ", n*(n+1)/2
@@ -398,7 +415,7 @@ can adjust the bounds.  This, for example, would be legal:
 and give you an index running from `1` to `num_images * n`, but
 you would still have to specify the correct coarray.
 
-# More advanced synchronization -- `SYNC IMAGES`
+# More advanced synchronization - `SYNC IMAGES`
 
 `SYNC ALL` is not everything that may be needed for synchronization.
 Suppose not every image needs to communicate with every other image,
@@ -454,10 +471,166 @@ end program
 Two images can issue `SYNC IMAGES` commands to each other multiple
 times. Execution will only continue if the numbers match.
 
-# Coroutines
+# Collective subroutines
 
-Another method.
+Data transfer between images can be repetetive to write.  For
+example, setting a value on all images would require an
+explicit DO loop over all images, plus explicit synchronization.
 
+To facilitate this, the Fortran 2018 standard introduced the collective
+subroutines.  Using these subroutines, you can transfer data between
+images using normal (i.e. non-coarray) variables.
+
+## Setting a value on all images - `CO_BROADCAST`
+
+You use the subroutine `CO_BROADCAST` to set the value of variables
+on all images from one particular image.  This variable can be an
+array or a scalar. Here is an example:
+```
+program main
+  integer, dimension(3) :: a
+  if (this_image () == 1) then
+    a = [2,3,5]
+  end if
+  call co_broadcast (a, 1)
+  write (*,*) 'Image', this_image(), "a =", a
+end program main
+```
+The call to co_broadcast works as if the value of `a` is
+been assigned to the value of `a` on image 1.
+`a` is *not* a coarray (no square brackets), and no explicit
+synchronization is needed. The compiler does that for you. The
+example output is
+```
+ Image           2 a =            2           3           5
+ Image           4 a =            2           3           5
+ Image           3 a =            2           3           5
+ Image           1 a =            2           3           5
+```
+
+## Common reductions - sum, maximum, minimum
+
+You often want to know the sum, maximum, minimum or product of
+something that is calculated on each image. This is common
+enough so that three is a subroutine for each of these tasks:
+`CO_SUM`, `CO_MAX`, `CO_MIN`, respectively.  You can apply these
+subroutines to scalars or arrays.
+
+These subroutines take as argument the variable to be reduced, plus
+an optional argument `RESULT_IMAGE` where the result should be
+stored.  If you supply that image number, then the result is only
+stored on the corresponding image, and the variables on all other
+variables become undefined. If you do not supply `RESULT_IMAGE`, the
+result is stored on every variable.  Here is an example without using
+`RESULT_IMAGE`:
+```
+program main
+  integer :: a
+  a = this_image()
+  call co_sum(a)
+  write (*,*) this_image(), a
+end
+```
+with the output
+```
+           2          10
+           4          10
+           3          10
+           1          10
+```
+And here is a variant which used `RESULT_IMAGE` to assign
+the value to image 1 only:
+```
+program main
+  implicit none
+  integer :: me, n
+  me = this_image ()
+  n = num_images()
+  call co_sum (me, result_image = 1)
+  if (this_image() == 1) then
+       write (*,'(*(A,I0))') "Number of images: ", n, " sum: ", me, &
+           " expected: ", n*(n+1)/2
+  end if
+end program main
+```
+with the output
+```
+Number of images: 4 sum: 10 expected: 10
+```
+Here is another example which calculates the sum, minimum and maximum
+of a value which is calculated for each image. The program prints out
+the values for each image, then the minimum, maximum and sum of
+each element.
+```
+program main
+  implicit none
+  integer, parameter :: n = 3
+  integer :: i
+  real, dimension(n) :: val
+  real, dimension(n) :: val_min, val_max, val_sum
+  val = [(cos(0.2*i*this_image()),i=1,n)]
+  write (*,'(I4," ",3F12.5)') this_image(), val
+  val_min = val
+  call co_min (val_min, result_image = 1)
+  val_max = val
+  call co_max (val_max, result_image = 1)
+  val_sum = val
+  call co_sum (val_sum, result_image = 1)
+  if (this_image() == 1) then
+     write (*,'(A,3F12.5)') "Min: ", val_min, "Max: ", val_max, &
+          "Sum: ", val_sum
+  end if
+end program main
+```
+The output is, for four images
+```
+   4      0.69671    -0.02920    -0.73739
+   2      0.92106     0.69671     0.36236
+   1      0.98007     0.92106     0.82534
+   3      0.82534     0.36236    -0.22720
+Min:      0.69671    -0.02920    -0.73739
+Max:      0.98007     0.92106     0.82534
+Sum:      3.42317     1.95093     0.22310
+```
+## Generalized reduction - `CO_REDUCE`
+There is a possibility that the reduction that is needed is not among
+the supported ones above. In that case, you can define your own
+function to do the reduction and call `CO_REDUCE`.
+
+The function needs to be `PURE`, and it needs to apply the operation
+to its two arguments.  It also needs to be transitive, so
+`f(a,b)` needs to do the same thing as `f(b,a)`. The following
+example checks if all elements of the logical variable `flag` are
+true, the same way that the `ALL` intrinsic would do for normal
+Fortran variables.
+```
+program main
+  implicit none
+  integer, parameter :: n = 3
+  integer :: i
+  logical, dimension(n) :: flag
+  flag = [(cos(0.2*i*this_image()) > 0.,i=1,n)]
+  write (*,'(I4," ",3L2)') this_image(), flag
+  call co_reduce (flag, both, result_image=1)
+  if (this_image() == 1) then
+     write (*,'(A5,3L2)') "All: ", flag
+  end if
+contains
+  pure function both (lhs,rhs) result(res)
+    logical, intent(in) :: lhs,rhs
+    logical :: res
+    res = lhs .AND. rhs
+  END FUNCTION both
+end program main
+```
+And here is its output:
+```
+   2  T T T
+   3  T T F
+   4  T F F
+   1  T T T
+All:  T F F
+```
 # Getting it to work
 
 ## Using gfortran
