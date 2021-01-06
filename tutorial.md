@@ -413,7 +413,11 @@ can adjust the bounds.  This, for example, would be legal:
   allocate (a(from:to)[*])
 ```
 and give you an index running from `1` to `num_images * n`, but
-you would still have to specify the correct coarray.
+you would still have to specify the correct coindices.
+
+`ALLOCATE` and `DEALLOCATE` also do implicit synchronization,
+so you can use the allocated coarrays directly, no need to
+specifcy any `SYNC` variant.
 
 # More advanced synchronization - `SYNC IMAGES`
 
@@ -631,6 +635,62 @@ And here is its output:
    1  T T T
 All:  T F F
 ```
+# Errors, error discovery and program termination
+
+What happens when errors occur and images terminate needs to be
+defined carefully. Fortran has facilities to detect failure on
+individual compute nodes and offers possibilities to deal with them.
+
+## Image states
+
+There are three states that an image can be in: It can be an
+- *active image* if it is running normally
+- *stopped image* if it has been terminated normally by reaching
+the end of the main program or by executing a `STOP` statement.
+- *failed image* when an image stopped working for some reason
+  (for example a hardware failure) or execution of a `FAIL IMAGE`
+  statement.
+
+Once an image is in a stopped or failed state, there is no coming
+back - it will always remain in that state.  An image can also be
+terminated by an *error condition*; all other images should then also
+be terminated by the system as soon as possible.  This is what
+usually happens when you try to allocate an already allocated
+variable, open a non-existent file for reading without specifying
+a `STAT` variable.
+
+## Look at the state you are in
+
+If you synchronize with a failed or stopped image, try to
+allocate or deallocate a variable there or other similar things,
+what is the system to do?  Without direction from the programmer,
+it will simply terminate the program (an error condition, as above).
+This is not very useful as a fail-safe tactic.
+
+However, the programmer can specify a `STAT` and optionally the
+`ERRMSG` arguments to catch the error and act accordingly. It
+is then possible to compare the value returned for the `STAT`
+argument against predefined values from `iso_fortran_env` and
+then use the intrinsic functions  `FAILED_IMAGES()` and
+`STOPPED_IMAGES()` too look up which ones failed.
+
+```
+program main
+  use iso_fortran_env, only : STAT_FAILED_IMAGE,  STAT_STOPPED_IMAGE
+  integer :: sync_stat, alloc_stat
+  sync all (stat=sync_stat)
+  if (stat /= 0) then
+    if (stat == STAT_FAILED_IMAGE) then
+      print *,"Failed images: ", failed_images()
+    else if (stat == STAT_STOPPED_IMAGE) then
+      print *,"Stopped images: ", stopped_images()
+    else
+      print *,"Unforseen error, aborting"
+      error stop
+    end if
+  end if
+```
+
 # Getting it to work
 
 ## Using gfortran
