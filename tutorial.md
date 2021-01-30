@@ -695,26 +695,40 @@ program main
 
 ## Using gfortran
 
-At the time of writing of this document, this may unfortunately
-be challenging.
 The [GNU Fortran compiler](https://gcc.gnu.org/onlinedocs/gfortran/)
-two possiblitites: Use of the `-fcoarray=lib` option and using
-[OpenCoarrays](http://www.opencoarrays.org/).  You may also need
-to have MPI installed to run it.
+supports [OpenCoarrays](http://www.opencoarrays.org/).  If you do not
+have it in your Linux distribution, you can follow the [installation
+instructions](https://github.com/sourceryinstitute/OpenCoarrays/blob/main/INSTALL.md) .
+Compilation then will be done via
+```
+$ mpif90 hello.f90 -lcaf_mpi
+```
+and the program can then be run by
+```
+$ mpiexec -n 10 ./a.out
+```
 
 Another possibilility currently under development is the [shared
-memory coarray
-branch](https://gcc.gnu.org/git/?p=gcc.git;a=tree;h=refs/heads/devel/coarray_native;hb=refs/heads/devel/coarray_native).
+memory coarray branch](https://gcc.gnu.org/git/?p=gcc.git;a=tree;h=refs/heads/devel/coarray_native;hb=refs/heads/devel/coarray_native).
 This will work without any additional libraries and currently under active development, but does not yet have all
 features implemented.
 
 ## Using ifort
 
-Refer to the [ifort documentation](https://software.intel.com/content/www/us/en/develop/documentation/fortran-compiler-oneapi-dev-guide-and-reference/top.html) 
-for details.
+If you use `ifort`, you can use the `-coarray` option, as in
+```
+$ ifort -coarray hello.f90
+```
+and then run the executable. This will give you the shared memory
+version.  For more details refer to the manpage of ifort.
 
 ## Using NAG Fortran
 
-Refer to the [NAG Fortran compiler documentation](https://www.nag.com/content/nag-fortran-compiler) for details.
+If you use `nagfor`, you can use the `-coarray` option, as in
+```
+$ nagfor -coarray hello.f90
+```
+and then run the executable. This will give yo the shared memory
+version.  For more details refert to the manpage of nagfor.
 
 
