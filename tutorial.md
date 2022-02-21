@@ -419,9 +419,13 @@ you would still have to specify the correct coindices.
 so you can use the allocated coarrays directly, no need to
 specifcy any `SYNC` variant.
 
-# More advanced synchronization - `SYNC IMAGES`
+# More advanced synchronization
 
-`SYNC ALL` is not everything that may be needed for synchronization.
+`SYNC ALL` is not everything that may be needed for synchronization,
+Fortran allows for more fine-grained control.
+
+## `SYNC IMAGES`
+
 Suppose not every image needs to communicate with every other image,
 but only with a specific set.  It is possible to use `SYNC IMAGES`
 for this purpose.
@@ -474,6 +478,74 @@ end program
 ```
 Two images can issue `SYNC IMAGES` commands to each other multiple
 times. Execution will only continue if the numbers match.
+
+A slightly more complex example.  Assume you want to write "Hello,
+world" from each image in reverse sequence (because you can).  Here
+is a program to do this:
+
+```
+program main
+  implicit none
+  integer :: me
+  me = this_image()
+  if (me < num_images()) sync images(me + 1)
+  print *,"Hello, world from", this_image()
+  if (me > 1) sync images (me - 1)
+end program main
+```
+
+Let's look at what happens with this program: All images but the one
+with the highest number wait until the image with one number higher
+has synchronized with them, so they get stuck (temporarily) in the
+first `SYNC IMAGES` statement.  The image with the highest number
+does not execute that, but runs straight through to the print statement
+and synchronizes with the one below, which then runs executes the
+print statement, which... until `me = 1`.
+
+Output could look like
+```
+ Hello, world from           4
+ Hello, world from           3
+ Hello, world from           2
+ Hello, world from           1
+```
+## `CRITICAL` and `END CRITICAL`
+
+Sometimes, it is desirable to protect some resource from interference
+from other images.  This can be done via the `CRITICAL` and `END
+CRITICAL` statements.
+
+The syntax is simple:
+```
+  CRITICAL
+    ! Only one image may execute this part at a time
+  END CRITICAL
+```
+
+## LOCK and UNLOCK
+
+Whie ```CRITICAL``` allows for some protection, pepole might want
+something more fine-grained.  For this, there is the `LOCK_TYPE` from
+`ISO_FORTRAN_ENV`.  The `LOCK` and `UNLOCK` statements allow one
+to manipulate such a lock.  To be useful, this variable has to
+be a coarray.  An example:  Let us assume we want to calculate
+the factorial of the number of images in a parallel way.  One
+possibility would be
+```
+program main
+  use, intrinsic :: iso_fortran_env, only: lock_type
+  implicit none
+  type(lock_type), codimension[*] :: lck
+  integer, codimension[*] :: i
+  if (this_image() == 1) i = 1
+  sync all
+  lock (lck[1])
+  i[1] = i[1] * this_image()
+  unlock (lck[1])
+  if (this_image() == 1) print *,i
+end program main
+```
+For four images, this will dutifully print `24`.
 
 # Collective subroutines
 
