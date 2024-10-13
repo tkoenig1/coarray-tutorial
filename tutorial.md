@@ -674,7 +674,7 @@ the supported ones above. In that case, you can define your own
 function to do the reduction and call `CO_REDUCE`.
 
 The function needs to be `PURE`, and it needs to apply the operation
-to its two arguments.  It also needs to be transitive, so
+to its two arguments.  It also needs to be commutative, so
 `f(a,b)` needs to do the same thing as `f(b,a)`. The following
 example checks if all elements of the logical variable `flag` are
 true, the same way that the `ALL` intrinsic would do for normal
